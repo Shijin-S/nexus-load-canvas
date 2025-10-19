@@ -1,115 +1,190 @@
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
-import { MetricCard } from "@/components/MetricCard";
-import { ServerCard } from "@/components/ServerCard";
-import { PerformanceChart } from "@/components/PerformanceChart";
-import { Activity, Zap, Users, Clock } from "lucide-react";
+import { ControlPanel } from "@/components/ControlPanel";
+import { SimpleMetricCard } from "@/components/SimpleMetricCard";
+import { ServerCluster, ServerData } from "@/components/ServerCluster";
+import { RequestQueue, RequestData } from "@/components/RequestQueue";
+import { ActivityLogs, LogEntry } from "@/components/ActivityLogs";
+import { Server, ListOrdered, Gauge, Clock } from "lucide-react";
 
 const Index = () => {
+  const [servers, setServers] = useState<ServerData[]>([
+    { id: 1, name: "Server 1", status: "healthy", cpuLoad: 10, requests: 3 },
+    { id: 2, name: "Server 2", status: "healthy", cpuLoad: 67, requests: 5 },
+  ]);
+  const [queue, setQueue] = useState<RequestData[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([
+    {
+      id: 1,
+      type: "allocation",
+      timestamp: "10:43:23 PM",
+      message: "Request req-121 allocated to Server 2"
+    },
+    {
+      id: 2,
+      type: "request",
+      timestamp: "10:39:15 PM",
+      message: "New request req-121 added to queue [size: 0]"
+    },
+    {
+      id: 3,
+      type: "allocation",
+      timestamp: "10:33:27 PM",
+      message: "Request req-120 allocated to Server 2"
+    },
+    {
+      id: 4,
+      type: "request",
+      timestamp: "10:30:15 PM",
+      message: "New request req-120 added to queue [size: 1]"
+    },
+  ]);
+  const [isAutoMode, setIsAutoMode] = useState(false);
+  const [requestCounter, setRequestCounter] = useState(122);
+  const [serverCounter, setServerCounter] = useState(3);
+
+  const addLog = (type: "allocation" | "request", message: string) => {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setLogs(prev => [{
+      id: Date.now(),
+      type,
+      timestamp,
+      message
+    }, ...prev]);
+  };
+
+  const handleAddRequest = () => {
+    const newRequest = { id: requestCounter, name: `req-${requestCounter}` };
+    setQueue(prev => [...prev, newRequest]);
+    addLog("request", `New request req-${requestCounter} added to queue [size: ${queue.length + 1}]`);
+    setRequestCounter(prev => prev + 1);
+  };
+
+  const handleProcessNext = () => {
+    if (queue.length === 0) return;
+    
+    const request = queue[0];
+    setQueue(prev => prev.slice(1));
+    
+    // Find server with lowest load (min heap algorithm)
+    const minLoadServer = servers.reduce((min, server) => 
+      server.cpuLoad < min.cpuLoad ? server : min
+    );
+    
+    setServers(prev => prev.map(s => 
+      s.id === minLoadServer.id 
+        ? { ...s, requests: s.requests + 1, cpuLoad: Math.min(100, s.cpuLoad + 10) }
+        : s
+    ));
+    
+    addLog("allocation", `Request ${request.name} allocated to ${minLoadServer.name}`);
+  };
+
+  const handleAddServer = () => {
+    const newServer: ServerData = {
+      id: serverCounter,
+      name: `Server ${serverCounter}`,
+      status: "healthy",
+      cpuLoad: 0,
+      requests: 0
+    };
+    setServers(prev => [...prev, newServer]);
+    addLog("allocation", `New ${newServer.name} added to cluster`);
+    setServerCounter(prev => prev + 1);
+  };
+
+  const handleRemoveServer = () => {
+    if (servers.length <= 1) return;
+    const removedServer = servers[servers.length - 1];
+    setServers(prev => prev.slice(0, -1));
+    addLog("allocation", `${removedServer.name} removed from cluster`);
+  };
+
+  const handleStartAutoMode = () => {
+    setIsAutoMode(!isAutoMode);
+  };
+
+  useEffect(() => {
+    if (!isAutoMode) return;
+
+    const interval = setInterval(() => {
+      // Auto add requests
+      if (Math.random() > 0.5) {
+        handleAddRequest();
+      }
+      
+      // Auto process requests
+      if (queue.length > 0) {
+        handleProcessNext();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isAutoMode, queue]);
+
+  const utilization = servers.length > 0 
+    ? (servers.reduce((sum, s) => sum + s.cpuLoad, 0) / servers.length).toFixed(1)
+    : "0.0";
+
+  const avgResponse = 55;
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="fixed inset-0 bg-gradient-mesh opacity-50 pointer-events-none" />
+      <div className="fixed inset-0 bg-gradient-mesh opacity-30 pointer-events-none" />
       
       <div className="relative">
         <Header />
         
-        <main className="container mx-auto px-6 py-8 max-w-7xl">
+        <main className="container mx-auto px-6 pb-8 max-w-7xl">
+          {/* Control Panel */}
+          <div className="mb-6">
+            <ControlPanel
+              onStartAutoMode={handleStartAutoMode}
+              onAddRequest={handleAddRequest}
+              onProcessNext={handleProcessNext}
+              onAddServer={handleAddServer}
+              onRemoveServer={handleRemoveServer}
+              isAutoMode={isAutoMode}
+            />
+          </div>
+
           {/* Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <MetricCard
-              title="Requests/sec"
-              value="8,432"
-              change="+12.5%"
-              changeType="positive"
-              icon={Activity}
-              trend="up"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <SimpleMetricCard
+              title="Active Servers"
+              value={servers.length}
+              icon={Server}
+              iconColor="text-primary"
             />
-            <MetricCard
-              title="Avg Response Time"
-              value="45ms"
-              change="-8.3%"
-              changeType="positive"
-              icon={Zap}
-              trend="down"
+            <SimpleMetricCard
+              title="Queue Length"
+              value={queue.length}
+              icon={ListOrdered}
+              iconColor="text-success"
             />
-            <MetricCard
-              title="Active Connections"
-              value="1,247"
-              change="+3.2%"
-              changeType="neutral"
-              icon={Users}
-              trend="up"
+            <SimpleMetricCard
+              title="Utilization"
+              value={`${utilization}%`}
+              icon={Gauge}
+              iconColor="text-warning"
             />
-            <MetricCard
-              title="Uptime"
-              value="99.98%"
-              change="30 days"
-              changeType="positive"
+            <SimpleMetricCard
+              title="Avg Response"
+              value={`${avgResponse}ms`}
               icon={Clock}
-              trend="stable"
+              iconColor="text-accent"
             />
           </div>
 
-          {/* Performance Chart */}
-          <div className="mb-8">
-            <PerformanceChart />
+          {/* Server Cluster and Request Queue */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <ServerCluster servers={servers} />
+            <RequestQueue requests={queue} />
           </div>
 
-          {/* Server Pool */}
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold text-foreground mb-2">Server Pool</h2>
-            <p className="text-muted-foreground mb-6">Real-time status of all load-balanced servers</p>
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            <ServerCard
-              name="lb-prod-01"
-              region="US-East-1"
-              status="healthy"
-              load={42}
-              connections={312}
-              responseTime={38}
-            />
-            <ServerCard
-              name="lb-prod-02"
-              region="US-West-2"
-              status="healthy"
-              load={58}
-              connections={421}
-              responseTime={42}
-            />
-            <ServerCard
-              name="lb-prod-03"
-              region="EU-Central-1"
-              status="healthy"
-              load={35}
-              connections={267}
-              responseTime={36}
-            />
-            <ServerCard
-              name="lb-prod-04"
-              region="AP-Southeast-1"
-              status="degraded"
-              load={78}
-              connections={189}
-              responseTime={68}
-            />
-            <ServerCard
-              name="lb-prod-05"
-              region="EU-West-1"
-              status="healthy"
-              load={51}
-              connections={334}
-              responseTime={41}
-            />
-            <ServerCard
-              name="lb-prod-06"
-              region="US-East-2"
-              status="healthy"
-              load={46}
-              connections={298}
-              responseTime={39}
-            />
-          </div>
+          {/* Activity Logs */}
+          <ActivityLogs logs={logs} />
         </main>
       </div>
     </div>

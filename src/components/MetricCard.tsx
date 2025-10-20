@@ -20,11 +20,14 @@ export const MetricCard = ({
   trend = "stable"
 }: MetricCardProps) => {
   return (
-    <Card className="p-6 hover:shadow-lg transition-all duration-300 border-border/50 bg-card/50 backdrop-blur-sm">
+    <Card
+      className="p-6 hover:shadow-lg transition-all duration-300 border border-border/50 backdrop-blur-sm"
+      style={{ backgroundColor: "hsl(0, 0%, 20%) !important" }} // dark gray background only
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-          <p className="text-3xl font-bold text-foreground mb-2">{value}</p>
+          <p className="text-3xl font-bold mb-2">{value}</p> {/* text color stays unchanged */}
           {change && (
             <div className="flex items-center gap-1">
               <span className={cn(
